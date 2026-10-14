@@ -17,7 +17,9 @@ DEST=/opt/orbbec/relay
 UNIT=/etc/systemd/system/ob-relay.service
 ENVF=/etc/default/ob-relay
 
-echo "==> 安装到 $DEST （模式：$([ $LOCAL = 1 ] && echo 本机直连 || echo 远程采集））"
+MODE_LABEL="远程采集"
+[ "$LOCAL" = 1 ] && MODE_LABEL="本机直连"
+echo "==> 安装到 $DEST （模式：$MODE_LABEL）"
 mkdir -p "$DEST"
 if [ "$SRC" = "$DEST" ]; then
   echo "    源与目标同目录，跳过拷贝"
