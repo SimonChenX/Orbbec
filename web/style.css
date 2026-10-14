@@ -30,6 +30,23 @@ main{flex:1;display:grid;grid-template-columns:1.5fr 1fr;grid-template-rows:1fr 
 #panelColor{grid-column:1;grid-row:1 / span 2}
 #panelDepth{grid-column:2;grid-row:1}
 #panelIr{grid-column:2;grid-row:2}
+/* 关掉某一路时，剩下的那路占满右列（否则半列留空很难看） */
+main.no-ir:not(.no-depth) #panelDepth{grid-row:1 / span 2}
+main.no-depth:not(.no-ir) #panelIr{grid-row:1 / span 2}
+main.no-depth.no-ir #panelColor{grid-column:1 / span 2}
+
+/* 页头常驻的画面开关（深度/红外）：直接改采集端码流参数 */
+.sw{display:inline-flex;align-items:center;gap:6px;padding:3px 10px 3px 6px;margin-right:2px;
+  border:1px solid #2c3a4e;border-radius:999px;background:#111a26;color:#9fb3c8;
+  font:inherit;font-size:12px;cursor:pointer;transition:background .15s,border-color .15s,color .15s}
+.sw .knob{position:relative;width:26px;height:14px;border-radius:999px;background:#33465e;transition:background .15s}
+.sw .knob::after{content:"";position:absolute;top:2px;left:2px;width:10px;height:10px;border-radius:50%;
+  background:#8098b0;transition:transform .15s,background .15s}
+.sw.on{border-color:#2ea043;background:#10251a;color:#d6ffe0}
+.sw.on .knob{background:#2ea043}
+.sw.on .knob::after{transform:translateX(12px);background:#eafff0}
+.sw[disabled]{opacity:.5;cursor:progress}
+div,button{box-sizing:border-box}
 .panel{display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);
   border-radius:8px;overflow:hidden;min-height:0;max-height:100%}
 .panel[hidden]{display:none}

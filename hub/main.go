@@ -151,6 +151,13 @@ func (h *Hub) Status() map[string]any {
 	cs := h.color.Status()
 	ds := h.depth.Status()
 	irs := h.ir.Status()
+	// 采集端关掉的那一路标成 off（不是 error）：页面与告警都不该把它当故障
+	if !h.depthEnabled() {
+		ds["state"], ds["error"] = "off", ""
+	}
+	if !h.irEnabled() {
+		irs["state"], irs["error"] = "off", ""
+	}
 	ss := h.screen.Status()
 
 	h.mu.Lock()

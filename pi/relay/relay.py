@@ -58,7 +58,9 @@ DEPTH_ZLIB = _env("OB_RELAY_DEPTH_ZLIB", "1") == "1"
 #       IR 帧（实测 depth 29fps / IR 0 帧）—— 早期「深度与红外互斥」的结论就是这么来的，
 #       那个结论是**错的**。两条独立 pipeline 实测各 29.3fps 同时满帧（2026-10-14 复核）。
 DEPTH_ENABLE = _env("OB_RELAY_DEPTH", "1") == "1"
-IR_ENABLE = _env("OB_RELAY_IR", "1") == "1"
+# 红外默认关：10bit 噪声数据 zlib 只压 ~1.5×（深度 7.2×），单它就占 ~130Mbps。
+# 网页页头的「红外」开关一点即开，不用登机器。
+IR_ENABLE = _env("OB_RELAY_IR", "0") == "1"
 IR_SIZE = _env("OB_IR_SIZE", "640x480")
 IR_FPS_CAP = int(_env("OB_IR_FPS", "30"))
 

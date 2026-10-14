@@ -13,6 +13,13 @@
   <b>Orbbec Astra Pro Plus</b>
   <span class="dim">彩色（骨骼）+ 深度 + 红外 实时预览</span>
   <span class="spacer"></span>
+  <button class="sw" id="swDepth" type="button" aria-pressed="true" title="深度流开关（改动后采集端重启约 5 秒）">
+    <span class="knob"></span><span class="txt">深度</span>
+  </button>
+  <button class="sw" id="swIr" type="button" aria-pressed="false" title="红外流开关（默认关闭：10bit 噪声数据 zlib 只压 ~1.5×，独自占到 ~130Mbps）">
+    <span class="knob"></span><span class="txt">红外</span>
+  </button>
+  <span class="msg" id="swMsg"></span>
   <span class="kv"><i>地址</i><b id="host">—</b></span>
   <span class="kv"><i>时间</i><b id="clock">—</b></span>
 </header>
@@ -154,6 +161,6 @@
   </div>
 </details>
 
-<script src="app.js?v=5"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>

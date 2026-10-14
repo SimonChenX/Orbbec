@@ -221,6 +221,7 @@
   setInterval(pollPose, 120);   // 侧车约 8fps，前端 8fps 取一次足够跟手
 
   // ================= 状态 =================
+  let lastD = true, lastI = false;   // 最近一次已知的深度/红外开关态（开关失败要回滚显示）
   function applyStatus(s) {
     const c = s.color || {}, d = s.depth || {}, r = s.relay || {}, ctrl = s.control || {};
     const ir = s.ir || {};
@@ -234,14 +235,24 @@
     if (gD) gD.hidden = !dOn;
     if (gI) gI.hidden = !iOn;
     if (!dOn && dCross) dCross.hidden = true;
+    // 开关状态 + 右列布局：关掉一路时剩下那路占满右列
+    lastD = dOn; lastI = iOn;
+    paintSwitches(dOn, iOn);
+    const mn = document.querySelector('main');
+    if (mn) {
+      const changed = (mn.classList.contains('no-depth') !== !dOn) ||
+                      (mn.classList.contains('no-ir') !== !iOn);
+      mn.classList.toggle('no-depth', !dOn);
+      mn.classList.toggle('no-ir', !iOn);
+      if (changed) fitAll();
+    }
 
     const cm = c.meta || {}, dm = d.meta || {}, im = ir.meta || {};
-    set('colorMeta', (cm.size || '—') + (c.fps ? '  ' + c.fps + ' fps' : '') +
-      (c.state === 'ok' ? '' : '  ⚠ ' + (c.error || c.state)));
-    set('depthMeta', (dm.size || '—') + (d.fps ? '  ' + d.fps + ' fps' : '') +
-      (d.state === 'ok' ? '' : '  ⚠ ' + (d.error || d.state)));
-    set('irMeta', (im.size || '—') + (ir.fps ? '  ' + ir.fps + ' fps' : '') +
-      (ir.state === 'ok' ? '' : '  ⚠ ' + (ir.error || ir.state)));
+    const stTag = (f) => f.state === 'ok' ? '' :
+      (f.state === 'off' ? '  · 已关闭' : '  ⚠ ' + (f.error || f.state));
+    set('colorMeta', (cm.size || '—') + (c.fps ? '  ' + c.fps + ' fps' : '') + stTag(c));
+    set('depthMeta', (dm.size || '—') + (d.fps ? '  ' + d.fps + ' fps' : '') + stTag(d));
+    set('irMeta', (im.size || '—') + (ir.fps ? '  ' + ir.fps + ' fps' : '') + stTag(ir));
 
     set('dCenter', num(dm.center_mm, ' mm'));
     set('dMin', num(dm.min_mm, ' mm'));
@@ -254,8 +265,8 @@
 
     set('dRatio', (dOn && dm.zlib_ratio) ? (dm.zlib_ratio + '×') : (iOn && im.zlib_ratio ? im.zlib_ratio + '×' : '—'));
     set('cFps', num(c.fps, ' fps'));
-    set('dFps', num(d.fps, ' fps'));
-    set('iFps', num(ir.fps, ' fps'));
+    set('dFps', d.state === 'off' ? '关' : num(d.fps, ' fps'));
+    set('iFps', ir.state === 'off' ? '关' : num(ir.fps, ' fps'));
     set('ingress', r.ingress_mbps ? (r.ingress_mbps + ' Mbps') : '—');
     set('temp', r.cpu_temp_c ? (r.cpu_temp_c + ' °C') : '—');
     set('host', location.host);
@@ -441,6 +452,40 @@
       post({ action: 'set_stream', values: collectStream() }, 'streamMsg');
     });
   }
+
+  // ================= 画面开关：一指点开关，直接改采集端码流参数 =================
+  // 走的就是「参数设置」里那套 /api/config set_stream，改完采集端自己重启（约 5 秒）
+  const SWS = [
+    { id: 'swDepth', key: 'OB_RELAY_DEPTH', name: '深度' },
+    { id: 'swIr',    key: 'OB_RELAY_IR',    name: '红外' }
+  ];
+  function paintSwitches(dOn, iOn) {
+    SWS.forEach((o) => {
+      const el = $(o.id); if (!el) return;
+      const on = o.id === 'swDepth' ? dOn : iOn;
+      el.classList.toggle('on', on);
+      el.setAttribute('aria-pressed', on ? 'true' : 'false');
+      el.disabled = el.dataset.busy === '1';
+      const t = el.querySelector('.txt');
+      if (t) t.textContent = o.name + (on ? ' 开' : ' 关');
+    });
+  }
+  SWS.forEach((o) => {
+    const el = $(o.id); if (!el) return;
+    el.addEventListener('click', async () => {
+      if (el.dataset.busy === '1') return;
+      const want = !el.classList.contains('on');
+      el.dataset.busy = '1';
+      // 先给乐观反馈，失败/重启完由下一次状态刷新矫正
+      el.classList.toggle('on', want);
+      el.disabled = true;
+      const t = el.querySelector('.txt');
+      if (t) t.textContent = o.name + (want ? ' 开' : ' 关');
+      await post({ action: 'set_stream', values: { [o.key]: want ? '1' : '0' } }, 'swMsg');
+      delete el.dataset.busy;
+      paintSwitches(lastD, lastI);
+    });
+  });
 
   fitAll();
 })();
