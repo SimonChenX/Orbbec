@@ -1,0 +1,20 @@
+[Unit]
+Description=Orbbec 相机聚合后端 (ob-hub) — 接收树莓派帧流、渲染、对外提供 MJPEG/API
+Documentation=file:/home/OrbbecPiApi/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/default/ob-hub
+ExecStart=/home/OrbbecPiApi/ob-hub
+WorkingDirectory=/home/OrbbecPiApi
+Restart=always
+RestartSec=2
+# MJPEG 长连接多、并发不高，放开 fd 上限
+LimitNOFILE=8192
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

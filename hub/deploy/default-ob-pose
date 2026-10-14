@@ -1,0 +1,16 @@
+# ob-pose 配置（骨骼分析侧车）。改完 systemctl restart ob-pose
+# 它只做「彩色画面 → 33 个关键点」，结果 POST 给 ob-hub，浏览器再去取。
+
+# 从哪台 hub 拉彩色画面（本机就是 127.0.0.1；将来把相机接在别的机器上时改这里）
+OB_POSE_HUB=http://127.0.0.1:9500
+
+# 姿态模型（mediapipe PoseLandmarker 的 .task 文件）
+# 可选 lite（快）/ full（准）/ heavy；换模型改这里即可
+OB_POSE_MODEL=/home/OrbbecPiApi/models/pose_landmarker_lite.task
+
+# 每秒推理多少次。720p 一帧约 45ms（单核），8fps 约占半个核，56 核机器很轻松。
+# 想更跟手就往上调（15 也行），代价是 CPU。
+OB_POSE_FPS=8
+
+# 检出阈值（低于这个就不算检出人）
+OB_POSE_MIN_CONF=0.4

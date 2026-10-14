@@ -1,0 +1,22 @@
+[Unit]
+Description=Orbbec 树莓派瘦采集转发 (ob-relay) — 只读设备并把原始帧推给服务器
+Documentation=file:/opt/orbbec/relay/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/default/ob-relay
+# SDK 的 .so 之间互相依赖（libdepthengine/libob_usb），必须给动态库搜索路径
+Environment=LD_LIBRARY_PATH=/opt/orbbec/SDK/lib
+ExecStart=/usr/bin/python3 /opt/orbbec/relay/relay.py
+WorkingDirectory=/opt/orbbec/relay
+Restart=always
+RestartSec=3
+# 采集线程若卡住，等 30 秒后由 systemd 强制重启（宁可重启也不静默卡死）
+WatchdogSec=0
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

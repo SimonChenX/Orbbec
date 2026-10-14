@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>相机预览</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<!-- 树莓派 kiosk 专用页。
+     上半：服务器合成的 800x330 单图（彩色+深度并排，12fps）——只有一个 <img>，
+           画面更新次数 = 合成帧率，浏览器开销最小。
+     下半：150px 信息条，1Hz 文字更新，中文标签。
+     合计 800x480 = 屏幕原生分辨率，1:1 不缩放。 -->
+<body class="kiosk">
+<img id="screenImg" src="/screen.mjpg" alt="预览">
+<div class="kiosk-bar">
+  <span class="kb-item"><i>彩色</i><b id="cFps">—</b></span>
+  <span class="kb-item"><i>深度</i><b id="dFps">—</b></span>
+  <span class="kb-item"><i>深度范围</i><b id="dRange">—</b></span>
+  <span class="kb-item"><i>有效像素</i><b id="dValid">—</b></span>
+  <span class="kb-item"><i>最近</i><b id="dMin">—</b></span>
+  <span class="spacer"></span>
+  <span class="kb-item"><i>设备温度</i><b id="temp">—</b></span>
+  <span class="kb-item"><i>入站</i><b id="ingress">—</b></span>
+  <span class="kb-item"><i class="kb-clock" id="clock">--:--:--</i></span>
+</div>
+<div class="kiosk-err" id="kioskErr">连接服务器失败，重试中…</div>
+<script src="/app.js"></script>
+</body>
+</html>

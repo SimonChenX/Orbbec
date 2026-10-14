@@ -1,0 +1,23 @@
+[Unit]
+Description=Orbbec Astra Pro Plus 彩色+深度实时预览 (MJPEG over HTTP)
+Documentation=file:/opt/orbbec/viewer/README.md
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+# SDK 从当前工作目录找 OrbbecSDKConfig_v1.0.xml —— 必须是 Example/bin
+WorkingDirectory=/opt/orbbec/Example/bin
+Environment=LD_LIBRARY_PATH=/opt/orbbec/SDK/lib
+Environment=PYTHONUNBUFFERED=1
+# 所有可调参数集中在 /etc/default/ob-viewer（缺失则用代码内默认值）
+EnvironmentFile=-/etc/default/ob-viewer
+ExecStart=/usr/bin/python3 /opt/orbbec/viewer/viewer.py
+Restart=always
+RestartSec=3
+User=root
+StandardOutput=append:/var/log/ob-viewer.log
+StandardError=append:/var/log/ob-viewer.log
+
+[Install]
+WantedBy=multi-user.target

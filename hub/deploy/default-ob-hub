@@ -1,0 +1,29 @@
+# Orbbec 相机聚合后端 (ob-hub) 配置
+# 改完执行：systemctl restart ob-hub
+
+# --- 采集入站（树莓派 relay 推流到这里）---
+# ⚠️ 需要 ufw 放行，且**只放行树莓派的网段**：
+#   ufw allow from 192.168.10.0/23 to any port 9501 proto tcp comment 'Orbbec Pi relay ingest'
+OB_HUB_INGEST=0.0.0.0:9501
+
+# --- HTTP（只监听本机，由 nginx 反代到 camera.internal.jiayouexp.com）---
+OB_HUB_HTTP=127.0.0.1:9500
+
+# --- 鉴权：与树莓派 /etc/default/ob-relay 的 OB_RELAY_PSK 必须一致 ---
+# 留空 = 跳过校验（仅开发用，别在生产留空）
+OB_HUB_PSK=__PSK__
+
+# --- 整屏合成流（给树莓派那块 800x480 的屏）---
+# 12fps 是刻意的：树莓派浏览器开销正比于「每秒画面刷新次数」，
+# 从本地方案的 ~48 次/秒降到 12 次/秒，开销减半。
+OB_HUB_SCREEN_FPS=0
+OB_HUB_SCREEN_SIZE=800x330
+# 合成图另用更高的 JPEG 质量（在下面这个值上 +6）
+OB_HUB_JPEG_Q=72
+
+# 超过这么久没新帧就把该路标成 stale
+OB_HUB_STALE_MS=2500
+
+# --- 录制（v1 预留，未实现）---
+# 设了也只会打一条日志；接口已在 Recorder 里留好
+OB_HUB_RECORD_DIR=

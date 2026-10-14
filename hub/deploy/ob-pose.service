@@ -1,0 +1,21 @@
+[Unit]
+Description=ob-pose —— 彩色画面骨骼分析（mediapipe 侧车）
+Documentation=file:///home/Orbbec/docs/09-骨骼-红外-深度取点.md
+After=network-online.target ob-hub.service
+Wants=ob-hub.service
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/default/ob-pose
+WorkingDirectory=/home/OrbbecPiApi
+# 先把 stderr 的 TF 日志压掉，不然日志里全是 XNNPACK 的 INFO
+Environment=TF_CPP_MIN_LOG_LEVEL=2
+Environment=GLOG_minloglevel=2
+ExecStart=/usr/bin/python3 /home/OrbbecPiApi/pose/ob_pose.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

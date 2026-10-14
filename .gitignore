@@ -1,0 +1,37 @@
+# 二进制与产物
+*.exe
+ob-hub
+ob-relay
+*.so
+*.a
+
+# 模型（体积大，见 hub/models/README.md 自行下载）
+*.task
+*.onnx
+*.pt
+*.tflite
+
+# 采集数据与截图
+*.bin
+*.jpg
+*.png
+!web/**/*.png
+samples/
+captures/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# 配置里的密钥（部署时生成的真实配置，绝不入库；deploy/ 下的模板是安全的）
+/etc/default/ob-*
+*.local
+
+# 编辑器 / 系统
+.DS_Store
+.idea/
+.vscode/
+*.swp

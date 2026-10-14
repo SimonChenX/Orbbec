@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Astra Pro Plus · 彩色 / 深度</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <span class="dot" id="dot"></span>
+  <span class="title">Orbbec Astra Pro Plus</span>
+  <span class="sub">彩色 + 深度 实时预览</span>
+  <span class="spacer"></span>
+  <span class="clock" id="clock">--:--:--</span>
+</header>
+
+<main>
+  <section class="panel">
+    <div class="label">
+      <b>彩色 COLOR</b>
+      <span class="meta" id="colorMeta">连接中…</span>
+    </div>
+    <div class="stage"><img id="colorImg" src="/color.mjpg" alt="彩色"></div>
+  </section>
+
+  <section class="panel">
+    <div class="label">
+      <b>深度 DEPTH</b>
+      <span class="meta" id="depthMeta">连接中…</span>
+    </div>
+    <div class="stage"><img id="depthImg" src="/depth.mjpg" alt="深度"></div>
+  </section>
+</main>
+
+<footer>
+  <span class="kv"><i>深度</i><b id="dCenter">—</b></span>
+  <span class="kv"><i>最近</i><b id="dMin">—</b></span>
+  <span class="kv"><i>最远</i><b id="dMax">—</b></span>
+  <span class="kv"><i>有效像素</i><b id="dValid">—</b></span>
+  <span class="kv"><i>量程</i><b id="dRange">—</b></span>
+  <span class="spacer"></span>
+  <span class="kv"><i>彩色</i><b id="cFps">—</b></span>
+  <span class="kv"><i>深度</i><b id="dFps">—</b></span>
+</footer>
+
+<script src="/app.js"></script>
+</body>
+</html>

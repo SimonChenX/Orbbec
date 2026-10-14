@@ -1,0 +1,41 @@
+# Orbbec 树莓派瘦采集转发 (ob-relay) 配置
+# 改完执行：systemctl restart ob-relay
+#
+# ⚠️ 这里的 PSK 必须与服务器 /etc/default/ob-hub 的 OB_HUB_PSK 一致。
+
+# --- 推流目标（聚合服务器）---
+OB_RELAY_HOST=192.168.5.20
+OB_RELAY_PORT=9501
+OB_RELAY_PSK=__PSK__
+# 标识自己，多个设备时便于在 /api/status 里区分
+OB_RELAY_WHO=pi-astra-01
+
+# --- 彩色（UVC /dev/video0）---
+# 相机原生 MJPEG 原样转发，不重编码（零 CPU、零画质损失）
+OB_COLOR_DEV=/dev/video0
+OB_COLOR_SIZE=640x480
+OB_COLOR_FPS=30
+
+# --- 深度（Orbbec SDK v1）---
+# ⚠️ 只有 320x240 可用：实测 640x480 有效像素仅 2%、1280x1024 仅 4.6%，320x240 是 70%+。
+#    已排除带宽因素（把彩色降到 640x480 再测也没好转），是设备档位本身的问题，别往上调。
+OB_DEPTH_SIZE=320x240
+OB_DEPTH_FPS=30
+# 深度原始流开 zlib：320x240 一帧 150KB 压到 ~20KB（7~10 倍），带宽换得很划算
+OB_RELAY_DEPTH_ZLIB=1
+
+# --- 传感器模式：深度 / 红外 二选一 ---
+# ⚠️ 本机型「深度」和「红外」共用同一个 IR 传感器，**不能同时出图**：
+#    两条流都 enable 时深度正常、IR 永远 0 帧。改这个值后重启本服务生效。
+OB_RELAY_SENSOR_MODE=depth
+# 红外分辨率：⚠️ 本机型只有 640x480 出图（320x240 在档位列表里、能起流，但永远等不到帧）
+OB_IR_SIZE=640x480
+OB_IR_FPS=30
+
+# SDK 路径（一般不用改）
+OB_SDK_LIB=/opt/orbbec/SDK/lib/libOrbbecSDK.so
+OB_SDK_CWD=/opt/orbbec/Example/bin
+
+# 心跳间隔（秒）：向服务器上报 fps/丢帧/温度，便于在 /api/status 里看到设备状态
+OB_RELAY_STATUS_SEC=1
+OB_RELAY_VERBOSE=0

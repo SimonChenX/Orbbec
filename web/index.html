@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Orbbec Astra Pro Plus · 相机监控</title>
+<link rel="stylesheet" href="style.css?v=4">
+</head>
+<body class="monitor">
+
+<header>
+  <span class="dot" id="dot"></span>
+  <b>Orbbec Astra Pro Plus</b>
+  <span class="dim">彩色 + <span id="sensorName">深度</span> 实时预览</span>
+  <span class="spacer"></span>
+  <span class="kv"><i>地址</i><b id="host">—</b></span>
+  <span class="kv"><i>时间</i><b id="clock">—</b></span>
+</header>
+
+<main>
+  <!-- 彩色：可选骨骼叠加 -->
+  <section class="panel" id="panelColor">
+    <div class="label">
+      <b>彩色 COLOR</b>
+      <span class="meta" id="colorMeta">—</span>
+      <span class="spacer"></span>
+      <label class="tgl" title="显示人体骨骼（33 个关键点，由服务器侧车推算）">
+        <input type="checkbox" id="poseToggle"> 骨骼
+      </label>
+    </div>
+    <div class="stage" id="stageColor">
+      <div class="imgwrap" id="wrapColor">
+        <img id="colorImg" src="/color.mjpg" alt="彩色画面">
+        <canvas id="poseCanvas"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- 深度：鼠标取点 -->
+  <section class="panel" id="panelDepth">
+    <div class="label">
+      <b>深度 DEPTH</b>
+      <span class="meta" id="depthMeta">—</span>
+      <span class="spacer"></span>
+      <span class="readout" id="depthReadout">鼠标移到画面上可取该点深度</span>
+    </div>
+    <div class="stage" id="stageDepth">
+      <div class="imgwrap" id="wrapDepth">
+        <img id="depthImg" src="/depth.mjpg" alt="深度画面">
+        <div class="cross" id="depthCross" hidden></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 红外：只在传感器模式=ir 时显示 -->
+  <section class="panel" id="panelIr" hidden>
+    <div class="label">
+      <b>红外 IR</b>
+      <span class="meta" id="irMeta">—</span>
+      <span class="spacer"></span>
+      <span class="dim">850nm 近红外反射 · <b>非热成像，无温度</b></span>
+    </div>
+    <div class="stage" id="stageIr">
+      <div class="imgwrap" id="wrapIr">
+        <img id="irImg" src="/ir.mjpg" alt="红外画面">
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <!-- 深度统计 -->
+  <span class="grp" id="grpDepth">
+    <span class="kv"><i>中心</i><b id="dCenter">—</b></span>
+    <span class="kv"><i>最近</i><b id="dMin">—</b></span>
+    <span class="kv"><i>最远</i><b id="dMax">—</b></span>
+    <span class="kv"><i>有效像素</i><b id="dValid">—</b></span>
+    <span class="kv"><i>色标范围</i><b id="dRange">—</b></span>
+  </span>
+  <!-- 红外统计 -->
+  <span class="grp" id="grpIr" hidden>
+    <span class="kv"><i>中位强度</i><b id="irP50">—</b></span>
+    <span class="kv"><i>强反射区</i><b id="irP95">—</b></span>
+    <span class="kv"><i>亮部占比</i><b id="irBright">—</b></span>
+    <span class="kv dim"><i>（强度 0~1023，非温度）</i></span>
+  </span>
+  <span class="spacer"></span>
+  <span class="kv"><i>压缩比</i><b id="dRatio">—</b></span>
+  <span class="kv"><i>入站</i><b id="ingress">—</b></span>
+  <span class="kv"><i>设备温度</i><b id="temp">—</b></span>
+  <span class="kv"><i>彩色</i><b id="cFps">—</b></span>
+  <span class="kv"><i>深度/红外</i><b id="dFps">—</b></span>
+  <span class="kv"><i>骨骼</i><b id="poseState">—</b></span>
+</footer>
+
+<details id="settingsBox">
+  <summary>⚙ 参数设置（相机 / 码流）</summary>
+  <div class="settings">
+    <div class="col">
+      <h3>相机参数 <span class="dim">立即生效</span></h3>
+      <div class="grid" id="cameraGrid"><span class="dim">展开后自动读取…</span></div>
+      <div class="row">
+        <button id="camApply">应用相机参数</button>
+        <button id="camReset" class="ghost">恢复设备默认</button>
+        <span class="msg" id="camMsg"></span>
+      </div>
+    </div>
+    <div class="col">
+      <h3>码流参数 <span class="dim">生效后采集端重启约 5 秒</span></h3>
+      <div class="grid" id="streamGrid"><span class="dim">展开后自动读取…</span></div>
+      <div class="row">
+        <button id="streamApply">应用码流参数</button>
+        <span class="msg" id="streamMsg"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <p><b>⚠️ 深度与红外只能二选一。</b>这台设备的深度图和红外图共用同一个 IR 传感器：
+       两条流都打开时深度正常、红外永远出不来帧（已实测）。
+       用上面的「传感器模式」切换，切换后采集端重启约 5 秒。</p>
+    <p><b>⚠️ 红外不是热成像，测不了温度。</b>Astra Pro Plus 的红外是 850nm 近红外补光相机，
+       拍的是反射率（像黑白相机），设备里没有热像传感器。要温度得另配热像仪（如 MLX90640 / FLIR）。</p>
+    <p><b>⚠️ 分辨率不是档位表里有的就能用</b>：本机型深度只有 <b>320x240</b> 有效
+       （640x480 有效像素仅 2%），红外只有 <b>640x480</b> 出图（320x240 一个帧都没有）。
+       已用真实抓帧验证，不是带宽问题。</p>
+    <p>深度图<b>鼠标悬停</b>可读该点深度（毫米），十字标记跟随鼠标；「<b>骨骼</b>」勾选后
+       彩色画面上会叠加人体关键点（服务器侧 ob-pose 推算，约 8fps，可随时停）。
+       「色标范围」是伪彩上色用的 5%~95% 分位区间，与「最近/最远」的绝对极值不必一致。</p>
+  </div>
+</details>
+
+<details id="apiBox">
+  <summary>🔌 使用说明 / 接口列表</summary>
+  <div class="settings">
+    <div class="col">
+      <h3>画面与数据</h3>
+      <pre>/                  本监控页
+/color.mjpg        彩色 MJPEG（原生透传）
+/depth.mjpg        深度 MJPEG（伪彩）
+/ir.mjpg           红外 MJPEG（灰度，需传感器模式=ir）
+/snapshot/color.jpg   单帧快照
+/snapshot/depth.jpg
+/snapshot/ir.jpg</pre>
+    </div>
+    <div class="col">
+      <h3>接口</h3>
+      <pre>/api/status                  状态 JSON
+/api/config   GET|POST       读/改相机与码流参数
+/api/depth_at?x=&amp;y=          取某像素深度（毫米）
+/api/pose     GET|POST       骨骼关键点（POST 仅内网）</pre>
+    </div>
+  </div>
+</details>
+
+<script src="app.js?v=4"></script>
+</body>
+</html>
