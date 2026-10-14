@@ -166,17 +166,20 @@ func (h *Hub) Status() map[string]any {
 	relay["ir_connects"] = h.irConns
 	h.mu.Unlock()
 
-	ok := cs["state"] == "ok" && ds["state"] == "ok"
-	mode := h.sensorMode()
-	if mode == "ir" {
-		// 红外模式下深度不会来（两者共用 IR 传感器，二选一），改看红外流
-		ok = cs["state"] == "ok" && irs["state"] == "ok"
+	// 深度/红外各跑独立 pipeline、可以同时在线；只有采集端关掉的那一路不参与健康判定
+	ok := cs["state"] == "ok"
+	if h.depthEnabled() {
+		ok = ok && ds["state"] == "ok"
+	}
+	if h.irEnabled() {
+		ok = ok && irs["state"] == "ok"
 	}
 	return map[string]any{
-		"ok":          ok,
-		"boot":        h.boot,
-		"uptime_s":    int(time.Since(startTime).Seconds()),
-		"sensor_mode": mode,
+		"ok":            ok,
+		"boot":          h.boot,
+		"uptime_s":      int(time.Since(startTime).Seconds()),
+		"depth_enabled": h.depthEnabled(),
+		"ir_enabled":    h.irEnabled(),
 		"color":       cs,
 		"depth":       ds,
 		"ir":          irs,
@@ -196,15 +199,19 @@ func (h *Hub) Status() map[string]any {
 	}
 }
 
-// sensorMode 采集端当前是「深度」还是「红外」（两者共用同一个 IR 传感器，只能二选一）。
-// 采集端还没上报时按 depth 处理。
-func (h *Hub) sensorMode() string {
+// depthEnabled / irEnabled：采集端是否启用了深度 / 红外。
+// 两路各跑独立 pipeline，可以同时开（早期「共用 IR 传感器只能二选一」的结论是错的）。
+// 采集端还没上报时按「开」处理。
+func (h *Hub) depthEnabled() bool { return h.relayFlag("depth_enabled") }
+func (h *Hub) irEnabled() bool    { return h.relayFlag("ir_enabled") }
+
+func (h *Hub) relayFlag(key string) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if m, ok := h.relayWho["sensor_mode"].(string); ok && m == "ir" {
-		return "ir"
+	if v, ok := h.relayWho[key].(bool); ok {
+		return v
 	}
-	return "depth"
+	return true
 }
 
 func (h *Hub) ConfigSummary() map[string]any {
@@ -439,12 +446,13 @@ func (h *Hub) runWatchdog() {
 	d := time.Duration(h.cfg.StaleMs) * time.Millisecond
 	for range t.C {
 		feeds := []*Feed{h.color}
-		// 深度与红外共用 IR 传感器、只能二选一：只盯当前模式下该来的那一路，
-		// 否则另一路永远"停滞"，日志会被刷屏、ok 也永远是 false。
-		if h.sensorMode() == "ir" {
-			feeds = append(feeds, h.ir)
-		} else {
+		// 深度/红外各跑独立 pipeline，可同时在线：只盯采集端真正启用的那几路。
+		// 关掉的那一路永远不会有帧，若也纳入看门狗会一直"停滞"，日志被刷屏。
+		if h.depthEnabled() {
 			feeds = append(feeds, h.depth)
+		}
+		if h.irEnabled() {
+			feeds = append(feeds, h.ir)
 		}
 		for _, f := range feeds {
 			if f.MarkStale(d) {

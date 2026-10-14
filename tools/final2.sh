@@ -1,6 +1,6 @@
 #!/bin/bash
 echo "########## 1. 树莓派屏（应为日历）##########"
-sshpass -p "$PI_PASS" ssh -o StrictHostKeyChecking=no root@192.168.10.76 \
+sshpass -f ~/.pi-pass ssh -o StrictHostKeyChecking=no root@192.168.10.76 \
  'echo "  kiosk 指向: $(cat /etc/pi-kiosk-url)"; echo "  ob-relay: $(systemctl is-active ob-relay) | ob-viewer: $(systemctl is-active ob-viewer) | pi-dashboard: $(systemctl is-active pi-dashboard)"; echo -n "  服务进程: "; ps -eo pcpu,comm --sort=-pcpu --no-headers | head -3 | tr "\n" " "; echo; top -bn1 | grep "%Cpu" | sed "s/^/  /"'
 
 echo
@@ -33,4 +33,4 @@ printf "  %-22s -> %s\n" "/screen.mjpg (已停用)" "$(curl -s -o /dev/null -w '
 echo
 echo "########## 5. 服务开机自启 ##########"
 echo "  ob-hub  : $(systemctl is-active ob-hub) / $(systemctl is-enabled ob-hub)"
-sshpass -p "$PI_PASS" ssh -o StrictHostKeyChecking=no root@192.168.10.76 'echo "  ob-relay: $(systemctl is-active ob-relay) / $(systemctl is-enabled ob-relay)"'
+sshpass -f ~/.pi-pass ssh -o StrictHostKeyChecking=no root@192.168.10.76 'echo "  ob-relay: $(systemctl is-active ob-relay) / $(systemctl is-enabled ob-relay)"'

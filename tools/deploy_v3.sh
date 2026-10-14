@@ -13,10 +13,10 @@ journalctl -u ob-hub -n 5 --no-pager | tail -4 | sed 's/^/  /'
 
 echo
 echo "########## 2. 部署采集端 relay 到树莓派 ##########"
-tar czf - -C /home/Orbbec relay | sshpass -p "$PI_PASS" ssh -o StrictHostKeyChecking=no root@192.168.10.76 \
+tar czf - -C /home/Orbbec relay | sshpass -f ~/.pi-pass ssh -o StrictHostKeyChecking=no root@192.168.10.76 \
   'tar xzf - -C /opt/orbbec && python3 -m py_compile /opt/orbbec/relay/relay.py && systemctl restart ob-relay'
 sleep 10
-sshpass -p "$PI_PASS" ssh -o StrictHostKeyChecking=no root@192.168.10.76 \
+sshpass -f ~/.pi-pass ssh -o StrictHostKeyChecking=no root@192.168.10.76 \
   'systemctl is-active ob-relay | sed "s/^/  ob-relay: /"; journalctl -u ob-relay -n 6 --no-pager | tail -5 | sed "s/^/  /"'
 
 echo

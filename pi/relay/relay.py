@@ -52,13 +52,13 @@ DEPTH_FPS_CAP = int(_env("OB_DEPTH_FPS", "30"))
 # 不开的话 640x480@30 要吃 18MB/s，加上彩色会顶满链路。
 DEPTH_ZLIB = _env("OB_RELAY_DEPTH_ZLIB", "1") == "1"
 
-# ⭐ 传感器模式：depth(深度) | ir(红外)
-#    ⚠️ 本机型「深度」和「红外」共用同一个 IR 传感器，**不能同时开**：
-#       两条流都 enable 时配置能过、深度也正常，但 frameset 里永远不会出现 IR 帧
-#       （已实测：depth 29.1fps / IR 0 帧）。所以只能二选一。
-SENSOR_MODE = _env("OB_RELAY_SENSOR_MODE", "depth").lower()
-if SENSOR_MODE not in ("depth", "ir"):
-    SENSOR_MODE = "depth"
+# ⭐ 传感器：深度 + 红外（默认两路都开）
+#    ⚠️ 关键：必须用**两条独立的 pipeline**、各自 start_with_config。
+#       把两条流塞进同一个 pipeline 时，配置能过、深度也正常，但 frameset 里永远没有
+#       IR 帧（实测 depth 29fps / IR 0 帧）—— 早期「深度与红外互斥」的结论就是这么来的，
+#       那个结论是**错的**。两条独立 pipeline 实测各 29.3fps 同时满帧（2026-10-14 复核）。
+DEPTH_ENABLE = _env("OB_RELAY_DEPTH", "1") == "1"
+IR_ENABLE = _env("OB_RELAY_IR", "1") == "1"
 IR_SIZE = _env("OB_IR_SIZE", "640x480")
 IR_FPS_CAP = int(_env("OB_IR_FPS", "30"))
 
@@ -288,11 +288,14 @@ def restore_camera_settings():
 
 # ---------------------------------------------------------------- 网页可调项
 STREAM_SPEC = [
-    # ⚠️ 深度与红外共用 IR 传感器，只能二选一（改了要重启采集端生效）
-    {"key": "OB_RELAY_SENSOR_MODE", "label": "传感器模式（深度/红外，二选一）",
-     "options": ["depth", "ir"],
-     "option_labels": {"depth": "深度图（可鼠标测距）", "ir": "红外图（近红外，非热成像）"},
-     "current": lambda: SENSOR_MODE},
+    # 两路可以同时开（各跑独立 pipeline）。关掉某一路能省树莓派 CPU 和链路带宽：
+    # 红外 640x480 未压缩约 85MB/s 量级，深度的原始流另有 zlib 压缩开关。
+    {"key": "OB_RELAY_DEPTH", "label": "深度图（可鼠标测距）",
+     "options": ["1", "0"], "option_labels": {"1": "开", "0": "关"},
+     "current": lambda: "1" if DEPTH_ENABLE else "0"},
+    {"key": "OB_RELAY_IR", "label": "红外图（近红外 850nm，非热成像）",
+     "options": ["1", "0"], "option_labels": {"1": "开", "0": "关"},
+     "current": lambda: "1" if IR_ENABLE else "0"},
     {"key": "OB_COLOR_SIZE", "label": "彩色分辨率", "options": ["640x480", "1280x720"], "current": lambda: COLOR_SIZE},
     {"key": "OB_COLOR_FPS", "label": "彩色帧率", "options": ["30", "15"], "current": lambda: str(COLOR_FPS)},
     {"key": "OB_DEPTH_SIZE", "label": "深度分辨率", "options": ["320x240", "640x480"], "current": lambda: DEPTH_SIZE},
@@ -531,22 +534,22 @@ def load_sdk():
     log("depth: SDK 已加载", SDK_LIB)
 
 
-def sensor_worker(q, stats):
-    """采集「深度」或「红外」，由 SENSOR_MODE 决定。
+def sensor_worker(q, stats, kind):
+    """采集「深度」或「红外」。kind = "depth" | "ir"。
 
-    ⚠️ 两者共用同一个 IR 传感器，同一时刻只能开一个：本机型把两条流都 enable 时
-    配置能过、深度也正常，但 frameset 里永远没有 IR 帧（实测 depth 29fps / IR 0 帧）。
+    ⚠️ 深度与红外必须各自跑**独立的 pipeline**（本函数一个实例对应一条流）。
+    把两条流放进同一个 pipeline 时 IR 恒为 0 帧——早期「互斥」结论的成因。
     """
     os.chdir(SDK_CWD)  # SDK 从 CWD 找 OrbbecSDKConfig_v1.0.xml
     load_sdk()
 
-    is_ir = SENSOR_MODE == "ir"
+    is_ir = kind == "ir"
     sensor = SENSOR_IR if is_ir else SENSOR_DEPTH
     size = IR_SIZE if is_ir else DEPTH_SIZE
     fps_cap = IR_FPS_CAP if is_ir else DEPTH_FPS_CAP
     ftype = obproto.TYPE_IR if is_ir else obproto.TYPE_DEPTH
     frame_getter = "ob_frameset_ir_frame" if is_ir else "ob_frameset_depth_frame"
-    log("sensor: 模式=%s 目标分辨率 %s" % (SENSOR_MODE, size))
+    log("sensor[%s]: 目标分辨率 %s" % (kind, size))
 
     want_w, want_h = (int(x) for x in size.lower().split("x"))
     while True:
@@ -574,7 +577,7 @@ def sensor_worker(q, stats):
 
             e = _err(); lib.ob_config_enable_stream(cfg, pick[0], C.byref(e)); _chk(e, "enable stream")
             e = _err(); lib.ob_pipeline_start_with_config(pipe, cfg, C.byref(e)); _chk(e, "pipeline start")
-            log("sensor: %s 流已启动 %dx%d" % (SENSOR_MODE, pick[1], pick[2]))
+            log("sensor[%s]: 流已启动 %dx%d" % (kind, pick[1], pick[2]))
 
             seq = 0
             t_last = 0.0
@@ -653,24 +656,32 @@ def cpu_temp():
         return None
 
 
-def heartbeat_loop(link, cstats, dstats):
+def heartbeat_loop(link, cstats, sensor_stats):
     while True:
         time.sleep(STATUS_EVERY)
+        d = sensor_stats.get("depth") or {}
+        i = sensor_stats.get("ir") or {}
         st = {
             "who": WHO,
             "uptime_s": int(time.time() - START),
-            "sensor_mode": SENSOR_MODE,
+            "depth_enabled": DEPTH_ENABLE,
+            "ir_enabled": IR_ENABLE,
             "color_frames": cstats["frames"],
             "color_sent": cstats["sent"],
             "color_dropped": cstats["dropped"],
             "color_size": COLOR_SIZE,
             "color_fps_target": COLOR_FPS,
-            "depth_frames": dstats["frames"],
-            "depth_sent": dstats["sent"],
-            "depth_dropped": dstats["dropped"],
-            "depth_size": IR_SIZE if SENSOR_MODE == "ir" else DEPTH_SIZE,
+            "depth_frames": d.get("frames", 0),
+            "depth_sent": d.get("sent", 0),
+            "depth_dropped": d.get("dropped", 0),
+            "depth_size": DEPTH_SIZE,
             "depth_scale": _depth_scale[0],
-            "depth_fps_cap": IR_FPS_CAP if SENSOR_MODE == "ir" else DEPTH_FPS_CAP,
+            "depth_fps_cap": DEPTH_FPS_CAP,
+            "ir_frames": i.get("frames", 0),
+            "ir_sent": i.get("sent", 0),
+            "ir_dropped": i.get("dropped", 0),
+            "ir_size": IR_SIZE,
+            "ir_fps_cap": IR_FPS_CAP,
             "cpu_temp_c": cpu_temp(),
             "link_online": link.online(),
             "link_reconnects": link.reconnects,
@@ -686,15 +697,15 @@ def heartbeat_loop(link, cstats, dstats):
 def main():
     log("ob-relay 启动：%s:%d  who=%s  psk=%s" % (
         HOST, PORT, WHO, "已设置" if PSK else "未设置"))
-    log("彩色 %s @%dfps %s | 传感器模式 %s（%s）" % (
-        COLOR_SIZE, COLOR_FPS, COLOR_DEV, SENSOR_MODE,
-        IR_SIZE if SENSOR_MODE == "ir" else DEPTH_SIZE))
+    log("彩色 %s @%dfps %s | 深度 %s | 红外 %s（深度/红外各跑独立 pipeline）" % (
+        COLOR_SIZE, COLOR_FPS, COLOR_DEV,
+        (DEPTH_SIZE if DEPTH_ENABLE else "关"),
+        (IR_SIZE if IR_ENABLE else "关")))
 
-    color_link, depth_link = Link("color"), Link(SENSOR_MODE)
+    color_link = Link("color")
     control_link = Link("control")
-    cq, dq = queue.Queue(maxsize=1), queue.Queue(maxsize=1)
+    cq = queue.Queue(maxsize=1)
     cstats = {"frames": 0, "sent": 0, "dropped": 0}
-    dstats = {"frames": 0, "sent": 0, "dropped": 0, "raw_bytes": 0, "wire_bytes": 0}
 
     # 把上次保存的相机参数打回设备（UVC 控制项重插后会丢）
     try:
@@ -704,22 +715,43 @@ def main():
 
     threads = [
         threading.Thread(target=color_worker, args=(cq, cstats), daemon=True, name="cap-color"),
-        threading.Thread(target=sensor_worker, args=(dq, dstats), daemon=True, name="cap-sensor"),
         threading.Thread(target=sender_loop, args=("color", color_link, cq, cstats), daemon=True, name="tx-color"),
-        threading.Thread(target=sender_loop, args=(SENSOR_MODE, depth_link, dq, dstats), daemon=True, name="tx-sensor"),
         threading.Thread(target=control_worker, args=(control_link,), daemon=True, name="control"),
-        threading.Thread(target=heartbeat_loop, args=(color_link, cstats, dstats), daemon=True, name="heartbeat"),
     ]
+
+    # 深度 / 红外：**各一个采集线程 + 各一条链路**（同 pipeline 开两条流时 IR 恒 0 帧）
+    sensor_stats, sensor_links = {}, {}
+    for kind, enabled in (("depth", DEPTH_ENABLE), ("ir", IR_ENABLE)):
+        if not enabled:
+            log("sensor[%s]: 配置为关闭，不起线程" % kind)
+            continue
+        q = queue.Queue(maxsize=1)
+        st = {"frames": 0, "sent": 0, "dropped": 0, "raw_bytes": 0, "wire_bytes": 0}
+        lk = Link(kind)
+        sensor_stats[kind] = st
+        sensor_links[kind] = lk
+        threads.append(threading.Thread(target=sensor_worker, args=(q, st, kind),
+                                        daemon=True, name="cap-" + kind))
+        threads.append(threading.Thread(target=sender_loop, args=(kind, lk, q, st),
+                                        daemon=True, name="tx-" + kind))
+
+    threads.append(threading.Thread(target=heartbeat_loop, args=(color_link, cstats, sensor_stats),
+                                    daemon=True, name="heartbeat"))
     for t in threads:
         t.start()
     log("已启动 %d 个线程" % len(threads))
 
     while True:
         time.sleep(30)
-        log("统计: 彩色 采%d/发%d/丢%d | %s 采%d/发%d/丢%d | 重连 %d/%d" % (
-            cstats["frames"], cstats["sent"], cstats["dropped"],
-            SENSOR_MODE, dstats["frames"], dstats["sent"], dstats["dropped"],
-            color_link.reconnects, depth_link.reconnects))
+        parts = ["彩色 采%d/发%d/丢%d" % (cstats["frames"], cstats["sent"], cstats["dropped"])]
+        for kind in ("depth", "ir"):
+            st = sensor_stats.get(kind)
+            if st:
+                parts.append("%s 采%d/发%d/丢%d" % (kind, st["frames"], st["sent"], st["dropped"]))
+        parts.append("重连 彩色%d %s" % (
+            color_link.reconnects,
+            " ".join("%s%d" % (k, v.reconnects) for k, v in sorted(sensor_links.items()))))
+        log("统计: " + " | ".join(parts))
 
 
 if __name__ == "__main__":

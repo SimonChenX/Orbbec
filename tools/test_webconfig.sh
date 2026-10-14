@@ -17,7 +17,7 @@ echo "########## 2. POST 改相机参数 gamma: 160 -> 190 ##########"
 curl -s --max-time 15 -X POST -H 'Content-Type: application/json' \
   -d '{"action":"set_camera","controls":{"gamma":190}}' $D/api/config | python3 -c "
 import sys,json; j=json.load(sys.stdin); print('  ok=%s msg=%s -> gamma=%s' % (j.get('ok'), j.get('msg'), (j.get('camera') or {}).get('gamma')))"
-echo "  设备侧核对:"; sshpass -p "$PI_PASS" ssh -o StrictHostKeyChecking=no root@192.168.10.76 'v4l2-ctl -d /dev/video0 -l | grep gamma | sed "s/^/    /"'
+echo "  设备侧核对:"; sshpass -f ~/.pi-pass ssh -o StrictHostKeyChecking=no root@192.168.10.76 'v4l2-ctl -d /dev/video0 -l | grep gamma | sed "s/^/    /"'
 
 echo
 echo "########## 3. 改回 gamma=160 ##########"

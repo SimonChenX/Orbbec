@@ -224,18 +224,16 @@
   function applyStatus(s) {
     const c = s.color || {}, d = s.depth || {}, r = s.relay || {}, ctrl = s.control || {};
     const ir = s.ir || {};
-    const mode = s.sensor_mode === 'ir' ? 'ir' : 'depth';
     const dot = $('dot');
     if (dot) dot.className = 'dot ' + (s.ok ? 'ok' : 'bad');
-
-    // 面板按传感器模式切换
+    // 深度/红外各跑独立 pipeline，可以同时在线；只有采集端关掉的那一路才隐藏
+    const dOn = s.depth_enabled !== false, iOn = s.ir_enabled !== false;
     const pD = $('panelDepth'), pI = $('panelIr'), gD = $('grpDepth'), gI = $('grpIr');
-    if (pD) pD.hidden = (mode === 'ir');
-    if (pI) pI.hidden = (mode !== 'ir');
-    if (gD) gD.hidden = (mode === 'ir');
-    if (gI) gI.hidden = (mode !== 'ir');
-    set('sensorName', mode === 'ir' ? '红外' : '深度');
-    if (mode !== 'ir' && dCross) dCross.hidden = dCross.hidden;
+    if (pD) pD.hidden = !dOn;
+    if (pI) pI.hidden = !iOn;
+    if (gD) gD.hidden = !dOn;
+    if (gI) gI.hidden = !iOn;
+    if (!dOn && dCross) dCross.hidden = true;
 
     const cm = c.meta || {}, dm = d.meta || {}, im = ir.meta || {};
     set('colorMeta', (cm.size || '—') + (c.fps ? '  ' + c.fps + ' fps' : '') +
@@ -254,9 +252,10 @@
     set('irP95', num(im.p95));
     set('irBright', num(im.bright_pct, '%'));
 
-    set('dRatio', (mode === 'ir' ? im.zlib_ratio : dm.zlib_ratio) ? ((mode === 'ir' ? im.zlib_ratio : dm.zlib_ratio) + '×') : '—');
+    set('dRatio', (dOn && dm.zlib_ratio) ? (dm.zlib_ratio + '×') : (iOn && im.zlib_ratio ? im.zlib_ratio + '×' : '—'));
     set('cFps', num(c.fps, ' fps'));
-    set('dFps', num(mode === 'ir' ? ir.fps : d.fps, ' fps'));
+    set('dFps', num(d.fps, ' fps'));
+    set('iFps', num(ir.fps, ' fps'));
     set('ingress', r.ingress_mbps ? (r.ingress_mbps + ' Mbps') : '—');
     set('temp', r.cpu_temp_c ? (r.cpu_temp_c + ' °C') : '—');
     set('host', location.host);

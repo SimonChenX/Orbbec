@@ -1,7 +1,7 @@
 #!/bin/bash
 # 验收测试：端到端延迟 + 三项故障演练
 PI=192.168.10.76
-SSH="sshpass -p "$PI_PASS" ssh -o StrictHostKeyChecking=no root@$PI"
+SSH="sshpass -f ~/.pi-pass ssh -o StrictHostKeyChecking=no root@$PI"
 
 st() { curl -s --max-time 5 http://127.0.0.1:9500/api/status; }
 
