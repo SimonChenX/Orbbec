@@ -52,6 +52,12 @@ DEPTH_FPS_CAP = int(_env("OB_DEPTH_FPS", "30"))
 # 不开的话 640x480@30 要吃 18MB/s，加上彩色会顶满链路。
 DEPTH_ZLIB = _env("OB_RELAY_DEPTH_ZLIB", "1") == "1"
 
+# ---------------------------------------------------------------- 相机总开关
+# ⭐ 相机总开关：默认**关**（OB_RELAY_CAMERA=0）
+#    关的时候树莓派完全不碰相机：不起彩色/深度/红外任何线程，只保留**控制通道**与心跳，
+#    所以网页上的「相机」开关仍然能一点即开（约 5 秒）。省 CPU、省链路带宽。
+CAMERA_ENABLE = _env("OB_RELAY_CAMERA", "0") == "1"
+
 # ⭐ 传感器：深度 + 红外（默认两路都开）
 #    ⚠️ 关键：必须用**两条独立的 pipeline**、各自 start_with_config。
 #       把两条流塞进同一个 pipeline 时，配置能过、深度也正常，但 frameset 里永远没有
@@ -290,6 +296,10 @@ def restore_camera_settings():
 
 # ---------------------------------------------------------------- 网页可调项
 STREAM_SPEC = [
+    # 相机总开关：关上时树莓派不采集任何画面（只留控制通道），随用随开。
+    {"key": "OB_RELAY_CAMERA", "label": "相机总开关",
+     "options": ["1", "0"], "option_labels": {"1": "开", "0": "关"},
+     "current": lambda: "1" if CAMERA_ENABLE else "0"},
     # 两路可以同时开（各跑独立 pipeline）。关掉某一路能省树莓派 CPU 和链路带宽：
     # 红外 640x480 未压缩约 85MB/s 量级，深度的原始流另有 zlib 压缩开关。
     {"key": "OB_RELAY_DEPTH", "label": "深度图（可鼠标测距）",
@@ -666,6 +676,7 @@ def heartbeat_loop(link, cstats, sensor_stats):
         st = {
             "who": WHO,
             "uptime_s": int(time.time() - START),
+            "camera_enabled": CAMERA_ENABLE,
             "depth_enabled": DEPTH_ENABLE,
             "ir_enabled": IR_ENABLE,
             "color_frames": cstats["frames"],
@@ -699,33 +710,39 @@ def heartbeat_loop(link, cstats, sensor_stats):
 def main():
     log("ob-relay 启动：%s:%d  who=%s  psk=%s" % (
         HOST, PORT, WHO, "已设置" if PSK else "未设置"))
-    log("彩色 %s @%dfps %s | 深度 %s | 红外 %s（深度/红外各跑独立 pipeline）" % (
-        COLOR_SIZE, COLOR_FPS, COLOR_DEV,
-        (DEPTH_SIZE if DEPTH_ENABLE else "关"),
-        (IR_SIZE if IR_ENABLE else "关")))
+    if CAMERA_ENABLE:
+        log("相机总开关=开：彩色 %s @%dfps %s | 深度 %s | 红外 %s（深度/红外各跑独立 pipeline）" % (
+            COLOR_SIZE, COLOR_FPS, COLOR_DEV,
+            (DEPTH_SIZE if DEPTH_ENABLE else "关"),
+            (IR_SIZE if IR_ENABLE else "关")))
+    else:
+        log("相机总开关=关（OB_RELAY_CAMERA=0）：不采集任何画面、不碰相机，仅保留控制通道与心跳；"
+            "网页页头「相机」开关一点即开（约 5 秒）")
 
-    color_link = Link("color")
     control_link = Link("control")
+    # 彩色链路对象**始终创建**：相机没开时不发帧，但心跳要走它上报状态（hub 只认数据链路上的状态帧）
+    color_link = Link("color")
     cq = queue.Queue(maxsize=1)
     cstats = {"frames": 0, "sent": 0, "dropped": 0}
 
-    # 把上次保存的相机参数打回设备（UVC 控制项重插后会丢）
-    try:
-        restore_camera_settings()
-    except Exception as ex:
-        log("camera: 恢复参数失败 %s" % ex)
+    threads = [threading.Thread(target=control_worker, args=(control_link,), daemon=True, name="control")]
 
-    threads = [
-        threading.Thread(target=color_worker, args=(cq, cstats), daemon=True, name="cap-color"),
-        threading.Thread(target=sender_loop, args=("color", color_link, cq, cstats), daemon=True, name="tx-color"),
-        threading.Thread(target=control_worker, args=(control_link,), daemon=True, name="control"),
-    ]
+    if CAMERA_ENABLE:
+        # 把上次保存的相机参数打回设备（UVC 控制项重插后会丢）
+        try:
+            restore_camera_settings()
+        except Exception as ex:
+            log("camera: 恢复参数失败 %s" % ex)
+        threads.append(threading.Thread(target=color_worker, args=(cq, cstats), daemon=True, name="cap-color"))
+        threads.append(threading.Thread(target=sender_loop, args=("color", color_link, cq, cstats),
+                                        daemon=True, name="tx-color"))
 
     # 深度 / 红外：**各一个采集线程 + 各一条链路**（同 pipeline 开两条流时 IR 恒 0 帧）
     sensor_stats, sensor_links = {}, {}
     for kind, enabled in (("depth", DEPTH_ENABLE), ("ir", IR_ENABLE)):
-        if not enabled:
-            log("sensor[%s]: 配置为关闭，不起线程" % kind)
+        if not CAMERA_ENABLE or not enabled:
+            log("sensor[%s]: %s，不起线程" % (
+                kind, "相机总开关关" if not CAMERA_ENABLE else "配置为关闭"))
             continue
         q = queue.Queue(maxsize=1)
         st = {"frames": 0, "sent": 0, "dropped": 0, "raw_bytes": 0, "wire_bytes": 0}
@@ -737,14 +754,18 @@ def main():
         threads.append(threading.Thread(target=sender_loop, args=(kind, lk, q, st),
                                         daemon=True, name="tx-" + kind))
 
-    threads.append(threading.Thread(target=heartbeat_loop, args=(color_link, cstats, sensor_stats),
+    threads.append(threading.Thread(target=heartbeat_loop,
+                                    args=(color_link, cstats, sensor_stats),
                                     daemon=True, name="heartbeat"))
     for t in threads:
         t.start()
-    log("已启动 %d 个线程" % len(threads))
+    log("已启动 %d 个线程%s" % (len(threads), "" if CAMERA_ENABLE else "（相机未开）"))
 
     while True:
         time.sleep(30)
+        if not CAMERA_ENABLE:
+            log("统计: 相机总开关=关，未采集（控制通道在线，网页可直接开）")
+            continue
         parts = ["彩色 采%d/发%d/丢%d" % (cstats["frames"], cstats["sent"], cstats["dropped"])]
         for kind in ("depth", "ir"):
             st = sensor_stats.get(kind)

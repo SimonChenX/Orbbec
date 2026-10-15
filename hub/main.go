@@ -152,6 +152,12 @@ func (h *Hub) Status() map[string]any {
 	ds := h.depth.Status()
 	irs := h.ir.Status()
 	// 采集端关掉的那一路标成 off（不是 error）：页面与告警都不该把它当故障
+	if !h.cameraEnabled() {
+		// 相机总开关关着：三路都不采集，全部标 off（页面显示开关 + 占位提示）
+		cs["state"], cs["error"] = "off", ""
+		ds["state"], ds["error"] = "off", ""
+		irs["state"], irs["error"] = "off", ""
+	}
 	if !h.depthEnabled() {
 		ds["state"], ds["error"] = "off", ""
 	}
@@ -173,20 +179,25 @@ func (h *Hub) Status() map[string]any {
 	relay["ir_connects"] = h.irConns
 	h.mu.Unlock()
 
-	// 深度/红外各跑独立 pipeline、可以同时在线；只有采集端关掉的那一路不参与健康判定
-	ok := cs["state"] == "ok"
-	if h.depthEnabled() {
-		ok = ok && ds["state"] == "ok"
-	}
-	if h.irEnabled() {
-		ok = ok && irs["state"] == "ok"
+	// 深度/红外各跑独立 pipeline、可以同时在线；只有采集端关掉的那一路不参与健康判定。
+	// 相机总开关关着时三路都不采集 → 整体视为健康（页面只显示开关与占位提示）。
+	ok := true
+	if h.cameraEnabled() {
+		ok = cs["state"] == "ok"
+		if h.depthEnabled() {
+			ok = ok && ds["state"] == "ok"
+		}
+		if h.irEnabled() {
+			ok = ok && irs["state"] == "ok"
+		}
 	}
 	return map[string]any{
-		"ok":            ok,
-		"boot":          h.boot,
-		"uptime_s":      int(time.Since(startTime).Seconds()),
-		"depth_enabled": h.depthEnabled(),
-		"ir_enabled":    h.irEnabled(),
+		"ok":             ok,
+		"boot":           h.boot,
+		"uptime_s":       int(time.Since(startTime).Seconds()),
+		"camera_enabled": h.cameraEnabled(),
+		"depth_enabled":  h.depthEnabled(),
+		"ir_enabled":     h.irEnabled(),
 		"color":       cs,
 		"depth":       ds,
 		"ir":          irs,
@@ -207,6 +218,10 @@ func (h *Hub) Status() map[string]any {
 }
 
 // depthEnabled / irEnabled：采集端是否启用了深度 / 红外。
+// 相机总开关：关着时采集端完全不采集（不碰相机），页面只显示开关与占位提示。
+// 采集端还没上报时按「开」处理（上报很快，避免误显示为关）。
+func (h *Hub) cameraEnabled() bool { return h.relayFlag("camera_enabled") }
+
 // 两路各跑独立 pipeline，可以同时开（早期「共用 IR 传感器只能二选一」的结论是错的）。
 // 采集端还没上报时按「开」处理。
 func (h *Hub) depthEnabled() bool { return h.relayFlag("depth_enabled") }
@@ -452,6 +467,10 @@ func (h *Hub) runWatchdog() {
 	defer t.Stop()
 	d := time.Duration(h.cfg.StaleMs) * time.Millisecond
 	for range t.C {
+		// 相机总开关关着：采集端不采集，什么都不用盯
+		if !h.cameraEnabled() {
+			continue
+		}
 		feeds := []*Feed{h.color}
 		// 深度/红外各跑独立 pipeline，可同时在线：只盯采集端真正启用的那几路。
 		// 关掉的那一路永远不会有帧，若也纳入看门狗会一直"停滞"，日志被刷屏。

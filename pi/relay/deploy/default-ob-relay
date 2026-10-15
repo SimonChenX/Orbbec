@@ -10,6 +10,11 @@ OB_RELAY_PSK=__PSK__
 # 标识自己，多个设备时便于在 /api/status 里区分
 OB_RELAY_WHO=pi-astra-01
 
+# --- 相机总开关（默认关）---
+# 关着时树莓派完全不碰相机：不起彩色/深度/红外任何线程，只保留控制通道与心跳（入站 0 Mbps），
+# 网页页头最左边的「相机」开关仍能一点即开（约 5 秒）。随用随开，不用就关。
+OB_RELAY_CAMERA=0
+
 # --- 彩色（UVC /dev/video0）---
 # 相机原生 MJPEG 原样转发，不重编码（零 CPU、零画质损失）
 OB_COLOR_DEV=/dev/video0
@@ -29,7 +34,7 @@ OB_RELAY_DEPTH_ZLIB=1
 #    早期据此误判为「共用 IR 传感器、只能二选一」——各开一条 pipeline 就能同时满帧。
 #    关掉某一路能省树莓派 CPU 与链路带宽（红外 640x480 是入站带宽的大头）。改后重启本服务生效。
 # 深度开、红外默认关（红外的 10bit 噪声数据 zlib 只压 ~1.5×，单它占 ~130Mbps；
-# 网页页头的「深度/红外」开关一点即改，不用登机器）
+# 网页页头的「相机/深度/红外」开关一点即改，不用登机器）
 OB_RELAY_DEPTH=1
 OB_RELAY_IR=0
 # 红外分辨率：⚠️ 本机型只有 640x480 出图（320x240 在档位列表里、能起流，但永远等不到帧）
@@ -40,6 +45,6 @@ OB_IR_FPS=30
 OB_SDK_LIB=/opt/orbbec/SDK/lib/libOrbbecSDK.so
 OB_SDK_CWD=/opt/orbbec/Example/bin
 
-# 心跳间隔（秒）：向服务器上报 fps/丢帧/温度，便于在 /api/status 里看到设备状态
+# 心跳间隔（秒）：向服务器上报 fps/丢帧/温度/开关态，便于在 /api/status 里看到设备状态
 OB_RELAY_STATUS_SEC=1
 OB_RELAY_VERBOSE=0

@@ -222,13 +222,20 @@
 
   // ================= 状态 =================
   let lastD = true, lastI = false;   // 最近一次已知的深度/红外开关态（开关失败要回滚显示）
+  let lastCam = false;               // 相机总开关（默认关）
   function applyStatus(s) {
     const c = s.color || {}, d = s.depth || {}, r = s.relay || {}, ctrl = s.control || {};
     const ir = s.ir || {};
     const dot = $('dot');
     if (dot) dot.className = 'dot ' + (s.ok ? 'ok' : 'bad');
-    // 深度/红外各跑独立 pipeline，可以同时在线；只有采集端关掉的那一路才隐藏
-    const dOn = s.depth_enabled !== false, iOn = s.ir_enabled !== false;
+    // 相机总开关（默认关）优先：关着时三路都不采集，只显示占位提示
+    const camOn = s.camera_enabled !== false;
+    const dSet = s.depth_enabled !== false, iSet = s.ir_enabled !== false;
+    const dOn = camOn && dSet, iOn = camOn && iSet;
+    const hint = $('camOffHint');
+    if (hint) hint.hidden = camOn;
+    const pC = $('panelColor');
+    if (pC) pC.hidden = !camOn;
     const pD = $('panelDepth'), pI = $('panelIr'), gD = $('grpDepth'), gI = $('grpIr');
     if (pD) pD.hidden = !dOn;
     if (pI) pI.hidden = !iOn;
@@ -236,8 +243,8 @@
     if (gI) gI.hidden = !iOn;
     if (!dOn && dCross) dCross.hidden = true;
     // 开关状态 + 右列布局：关掉一路时剩下那路占满右列
-    lastD = dOn; lastI = iOn;
-    paintSwitches(dOn, iOn);
+    lastD = dSet; lastI = iSet; lastCam = camOn;
+    paintSwitches(camOn, dSet, iSet);
     const mn = document.querySelector('main');
     if (mn) {
       const changed = (mn.classList.contains('no-depth') !== !dOn) ||
@@ -264,7 +271,7 @@
     set('irBright', num(im.bright_pct, '%'));
 
     set('dRatio', (dOn && dm.zlib_ratio) ? (dm.zlib_ratio + '×') : (iOn && im.zlib_ratio ? im.zlib_ratio + '×' : '—'));
-    set('cFps', num(c.fps, ' fps'));
+    set('cFps', camOn ? num(c.fps, ' fps') : '关');
     set('dFps', d.state === 'off' ? '关' : num(d.fps, ' fps'));
     set('iFps', ir.state === 'off' ? '关' : num(ir.fps, ' fps'));
     set('ingress', r.ingress_mbps ? (r.ingress_mbps + ' Mbps') : '—');
@@ -456,16 +463,19 @@
   // ================= 画面开关：一指点开关，直接改采集端码流参数 =================
   // 走的就是「参数设置」里那套 /api/config set_stream，改完采集端自己重启（约 5 秒）
   const SWS = [
-    { id: 'swDepth', key: 'OB_RELAY_DEPTH', name: '深度' },
-    { id: 'swIr',    key: 'OB_RELAY_IR',    name: '红外' }
+    { id: 'swCam',   key: 'OB_RELAY_CAMERA', name: '相机', master: true },
+    { id: 'swDepth', key: 'OB_RELAY_DEPTH',  name: '深度' },
+    { id: 'swIr',    key: 'OB_RELAY_IR',     name: '红外' }
   ];
-  function paintSwitches(dOn, iOn) {
+  function paintSwitches(camOn, dOn, iOn) {
     SWS.forEach((o) => {
       const el = $(o.id); if (!el) return;
-      const on = o.id === 'swDepth' ? dOn : iOn;
+      const on = o.master ? camOn : (o.id === 'swDepth' ? dOn : iOn);
       el.classList.toggle('on', on);
       el.setAttribute('aria-pressed', on ? 'true' : 'false');
-      el.disabled = el.dataset.busy === '1';
+      // 总开关关着时，深度/红外开关置灰且不可点（先开相机）
+      el.classList.toggle('locked', !o.master && !camOn);
+      el.disabled = el.dataset.busy === '1' || (!o.master && !camOn);
       const t = el.querySelector('.txt');
       if (t) t.textContent = o.name + (on ? ' 开' : ' 关');
     });
@@ -483,7 +493,7 @@
       if (t) t.textContent = o.name + (want ? ' 开' : ' 关');
       await post({ action: 'set_stream', values: { [o.key]: want ? '1' : '0' } }, 'swMsg');
       delete el.dataset.busy;
-      paintSwitches(lastD, lastI);
+      paintSwitches(lastCam, lastD, lastI);
     });
   });
 

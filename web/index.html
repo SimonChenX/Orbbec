@@ -13,7 +13,10 @@
   <b>Orbbec Astra Pro Plus</b>
   <span class="dim">彩色（骨骼）+ 深度 + 红外 实时预览</span>
   <span class="spacer"></span>
-  <button class="sw" id="swDepth" type="button" aria-pressed="true" title="深度流开关（改动后采集端重启约 5 秒）">
+  <button class="sw master" id="swCam" type="button" aria-pressed="false" title="相机总开关（默认关闭）：关上时树莓派完全不采集、不碰相机；点开约 5 秒出画面">
+    <span class="knob"></span><span class="txt">相机</span>
+  </button>
+  <button class="sw" id="swDepth" type="button" aria-pressed="true" title="深度流开关（改动后采集端重启约 5 秒；需先开相机）">
     <span class="knob"></span><span class="txt">深度</span>
   </button>
   <button class="sw" id="swIr" type="button" aria-pressed="false" title="红外流开关（默认关闭：10bit 噪声数据 zlib 只压 ~1.5×，独自占到 ~130Mbps）">
@@ -25,6 +28,13 @@
 </header>
 
 <main>
+  <!-- 相机总开关关着时显示这个占位（默认就是关的） -->
+  <div class="cam-off-hint" id="camOffHint">
+    <div class="big">📷</div>
+    <b>相机已关闭</b>
+    <span class="dim">点右上角「相机」开关即可开启（约 5 秒出画面），不用时会自动省掉全部带宽与树莓派开销</span>
+  </div>
+
   <!-- 彩色：可选骨骼叠加 -->
   <section class="panel" id="panelColor">
     <div class="label">
@@ -161,6 +171,6 @@
   </div>
 </details>
 
-<script src="app.js?v=6"></script>
+<script src="app.js?v=7"></script>
 </body>
 </html>

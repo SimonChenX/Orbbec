@@ -46,6 +46,21 @@ main.no-depth.no-ir #panelColor{grid-column:1 / span 2}
 .sw.on .knob{background:#2ea043}
 .sw.on .knob::after{transform:translateX(12px);background:#eafff0}
 .sw[disabled]{opacity:.5;cursor:progress}
+/* 相机总开关：比深度/红外更醒目一点 */
+.sw.master{border-color:#3d5a80;background:#16233a;color:#cfe3ff}
+.sw.master.on{border-color:#2ea043;background:#10251a;color:#d6ffe0}
+.sw.master .knob{width:30px;height:16px}
+.sw.master .knob::after{width:12px;height:12px}
+.sw.master.on .knob::after{transform:translateX(14px)}
+.sw.locked{opacity:.4;cursor:not-allowed}
+
+/* 相机关着时的占位：铺满预览区 */
+.cam-off-hint{grid-column:1 / -1;grid-row:1 / span 2;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:10px;padding:40px;text-align:center;
+  border:1px dashed #2c3a4e;border-radius:12px;color:#9fb3c8}
+.cam-off-hint .big{font-size:44px;line-height:1}
+.cam-off-hint b{font-size:16px;color:#cfe3ff}
+
 div,button{box-sizing:border-box}
 .panel{display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);
   border-radius:8px;overflow:hidden;min-height:0;max-height:100%}
