@@ -207,6 +207,42 @@ sh /opt/orbbec/viewer/deploy/switch-kiosk.sh            # 查看当前
 5. **删掉一个 grid 行别忘了改 CSS**：整屏合成面板删了，但 `grid-template-rows` 还留着两行，
    预览区下方空出一大块。
 
+### 7.7 ⭐ 页头开关 + 深度/红外两路独立 pipeline（2026-10-15）
+
+**背景（推翻了早前一个错结论）**：原来的采集端是「传感器模式二选一」（`OB_RELAY_SENSOR_MODE=depth|ir`），
+依据是「深度与红外共用 IR 传感器、只能开一个」。**这个结论是错的** ——
+错因是把两条流 `enable` 到**同一个 pipeline**：那样深度正常、**IR 恒 0 帧**；
+改成**两条各自独立的 pipeline**（各自 `start_with_config`）后两路可同时满帧（实测各 29.3 fps）。
+
+**采集端**：`OB_RELAY_SENSOR_MODE` 删除，改为两个独立开关（`/etc/default/ob-relay`）：
+
+```
+OB_RELAY_DEPTH=1   # 深度（默认开）
+OB_RELAY_IR=0      # 红外（默认关，见下）
+```
+
+**红外为什么默认关**：它是 10bit 噪声数据，zlib 只能压 ~1.5×（深度 7.2×），单它就占 ~130Mbps。
+默认关掉后入站带宽 **144 → 58 Mbps**。要看红外随时开。
+
+**前端**：页头常驻两个开关按钮（绿=开 / 灰=关），走的还是 §7.5 那套反向控制通道：
+
+```
+点「红外」→ POST /api/config {action:"set_stream", values:{OB_RELAY_IR:"1"}}
+          → relay 写 /etc/default/ob-relay → 自己退出、systemd 拉起（~5 秒生效）
+          → 页面轮询 /api/status 自动恢复画面
+```
+
+* **关掉的那一路是「off」语义，不是「error」**：`/api/status` 里给 `state=off`、清空 error；
+  hub 的健康判定与看门狗**都跳过它**（否则关掉那路永远「停滞」，日志刷屏且 `ok` 永远 false）；
+  前端把该面板 hidden、状态栏显示「关」（而不是 0 fps）。
+* **布局自适应**：关掉一路时，剩下那路自动占满右列（`main.no-ir` / `main.no-depth` 两个 class）。
+* 关掉一路也省树莓派 CPU（红外采集约占一个核）。
+
+**踩过的坑**：`POST /api/config` 会把**表单里所有字段**一起下发（不是只发改动的那项）。
+所以改了前端一定要给 `app.js?v=N` 递增版本号并让用户强刷；旧标签页的保存会按它渲染时的旧值
+覆盖新字段。排查「谁改了我的参数」：nginx access log 看 POST 的来源 IP/UA →
+relay journal 看 `control: set_stream -> 已写入 /etc/default/ob-relay` → 再核对 env 实际值。
+
 ## 8. 后续可做（本次未做，接口已留）
 
 * **录制/存盘**：`Recorder` 接口已定义（`OnColorJPEG`/`OnDepthY16`），实现并注册即可。
